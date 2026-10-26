@@ -34,3 +34,5 @@ npm run check                # проверить типы
 - `src/server.ts` — HTTP-обработчик и запуск сервера.
 - `test/` — тесты vitest.
 - `docs/` — постановки и документы задач (см. `docs/README.md`).
+
+Проверено Hireminds
