@@ -25,3 +25,7 @@ export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all
   if (filter === 'done') return list.items.filter((t) => t.done);
   return list.items;
 }
+
+export function healthStatus(uptimeSeconds: number): { status: 'ok'; uptime: number } {
+  return { status: 'ok', uptime: uptimeSeconds };
+}

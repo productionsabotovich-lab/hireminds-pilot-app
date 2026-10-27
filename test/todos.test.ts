@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTodo, completeTodo, emptyList, listTodos } from '../src/todos.js';
+import { addTodo, completeTodo, emptyList, healthStatus, listTodos } from '../src/todos.js';
 
 describe('todos', () => {
   it('adds a todo with a sequential id', () => {
@@ -23,5 +23,11 @@ describe('todos', () => {
 
   it('fails to complete an unknown todo', () => {
     expect(() => completeTodo(emptyList(), 9)).toThrow('todo 9 not found');
+  });
+});
+
+describe('health', () => {
+  it('reports ok with uptime', () => {
+    expect(healthStatus(12.5)).toEqual({ status: 'ok', uptime: 12.5 });
   });
 });
