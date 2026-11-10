@@ -8,6 +8,12 @@ export function emptyList(): TodoList {
   return { nextId: 1, items: [] };
 }
 
+export function todoStats(list: TodoList): { total: number; open: number; done: number } {
+  const total = list.items.length;
+  const done = list.items.filter((todo) => todo.done === true).length;
+  return { total, open: total - done, done };
+}
+
 export function addTodo(list: TodoList, title: string): { list: TodoList; todo: Todo } {
   const trimmed = title.trim();
   if (trimmed.length === 0) throw new Error('title is empty');
