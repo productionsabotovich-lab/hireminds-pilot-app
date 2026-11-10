@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTodo, completeTodo, emptyList, listTodos } from '../src/todos.js';
+import { addTodo, completeTodo, emptyList, listTodos, todoStats } from '../src/todos.js';
 
 describe('todos', () => {
   it('adds a todo with a sequential id', () => {
@@ -23,5 +23,54 @@ describe('todos', () => {
 
   it('fails to complete an unknown todo', () => {
     expect(() => completeTodo(emptyList(), 9)).toThrow('todo 9 not found');
+  });
+});
+
+describe('todoStats', () => {
+  it('counts an empty list', () => {
+    expect(todoStats(emptyList())).toEqual({ total: 0, open: 0, done: 0 });
+  });
+
+  it('counts mixed open and completed todos', () => {
+    let { list } = addTodo(emptyList(), 'a');
+    list = addTodo(list, 'b').list;
+    list = addTodo(list, 'c').list;
+    list = completeTodo(list, 2);
+    expect(todoStats(list)).toEqual({ total: 3, open: 2, done: 1 });
+  });
+
+  it('counts all completed todos', () => {
+    let { list } = addTodo(emptyList(), 'a');
+    list = addTodo(list, 'b').list;
+    list = completeTodo(completeTodo(list, 1), 2);
+    expect(todoStats(list)).toEqual({ total: 2, open: 0, done: 2 });
+  });
+
+  it('reflects additions and completion, including repeated completion', () => {
+    let { list } = addTodo(emptyList(), 'a');
+    expect(todoStats(list)).toEqual({ total: 1, open: 1, done: 0 });
+    list = completeTodo(list, 1);
+    expect(todoStats(list)).toEqual({ total: 1, open: 0, done: 1 });
+    list = completeTodo(list, 1);
+    expect(todoStats(list)).toEqual({ total: 1, open: 0, done: 1 });
+    list = addTodo(list, 'b').list;
+    expect(todoStats(list)).toEqual({ total: 2, open: 1, done: 1 });
+  });
+
+  it('preserves the input, its items and their order, even when frozen', () => {
+    let { list } = addTodo(emptyList(), 'a');
+    list = addTodo(list, 'b').list;
+    list = completeTodo(list, 1);
+    const snapshot = structuredClone(list);
+    const items = list.items;
+    const originalItems = [...items];
+    for (const todo of items) Object.freeze(todo);
+    Object.freeze(items);
+    Object.freeze(list);
+
+    expect(todoStats(list)).toEqual({ total: 2, open: 1, done: 1 });
+    expect(list).toEqual(snapshot);
+    expect(list.items).toBe(items);
+    list.items.forEach((todo, index) => expect(todo).toBe(originalItems[index]));
   });
 });
