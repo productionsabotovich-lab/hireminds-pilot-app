@@ -23,6 +23,7 @@ npm run check                # проверить типы
 | Метод и путь | Что делает |
 | --- | --- |
 | `GET /todos?filter=all\|open\|done` | Список дел |
+| `GET /todos/stats` | Статистика всего списка: `{ total, open, done }` — всего, открытых и выполненных дел; query-параметры не влияют на подсчёт |
 | `POST /todos` `{ "title": "..." }` | Добавить дело |
 | `POST /todos/:id/complete` | Отметить выполненным |
 
