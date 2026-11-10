@@ -25,3 +25,9 @@ export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all
   if (filter === 'done') return list.items.filter((t) => t.done);
   return list.items;
 }
+
+export function todoStats(list: TodoList): { total: number; open: number; done: number } {
+  const total = list.items.length;
+  const done = list.items.filter((todo) => todo.done === true).length;
+  return { total, open: total - done, done };
+}
