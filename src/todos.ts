@@ -25,3 +25,10 @@ export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all
   if (filter === 'done') return list.items.filter((t) => t.done);
   return list.items;
 }
+
+// Сводка по списку: всего, открыто, выполнено. Не мутирует вход.
+export function todoStats(list: TodoList): { total: number; open: number; done: number } {
+  const total = list.items.length;
+  const done = list.items.reduce((count, todo) => (todo.done ? count + 1 : count), 0);
+  return { total, open: total - done, done };
+}
