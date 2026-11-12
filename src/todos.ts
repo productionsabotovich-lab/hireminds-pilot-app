@@ -4,6 +4,8 @@ export type Todo = { id: number; title: string; done: boolean };
 
 export type TodoList = { nextId: number; items: Todo[] };
 
+export type TodoStats = { total: number; open: number; done: number };
+
 export function emptyList(): TodoList {
   return { nextId: 1, items: [] };
 }
@@ -24,4 +26,11 @@ export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all
   if (filter === 'open') return list.items.filter((t) => !t.done);
   if (filter === 'done') return list.items.filter((t) => t.done);
   return list.items;
+}
+
+export function todoStats(list: TodoList): TodoStats {
+  let done = 0;
+  for (const item of list.items) if (item.done) done += 1;
+  const total = list.items.length;
+  return { total, open: total - done, done };
 }
