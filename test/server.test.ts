@@ -107,6 +107,60 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /version', () => {
+    it('returns the fixed version of the test API', async () => {
+      const res = await get('/version');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"version":"1"}');
+    });
+
+    it('returns a single string field named version', async () => {
+      const body = (await (await get('/version')).json()) as Record<string, unknown>;
+      expect(Object.keys(body)).toEqual(['version']);
+      expect(body.version).toBe('1');
+      expect(typeof body.version).toBe('string');
+    });
+
+    it('ignores query parameters', async () => {
+      const plain = await (await get('/version')).text();
+      const withQuery = await (await get('/version?probe=1')).text();
+      expect(withQuery).toBe(plain);
+      expect(withQuery).toBe('{"version":"1"}');
+    });
+
+    it('does not change the todos, the stats or the next id', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+
+      const todosBefore = await (await get('/todos')).text();
+      const statsBefore = await (await get('/todos/stats')).text();
+
+      const first = await (await get('/version')).text();
+      const second = await (await get('/version')).text();
+
+      expect(first).toBe('{"version":"1"}');
+      expect(second).toBe(first);
+      expect(await (await get('/todos')).text()).toBe(todosBefore);
+      expect(await (await get('/todos/stats')).text()).toBe(statsBefore);
+
+      const created = await post('/todos', { title: 'c' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'c', done: false });
+    });
+
+    it('keeps the existing 404 for other paths and methods', async () => {
+      const trailing = await get('/version/');
+      expect(trailing.status).toBe(404);
+      expect(await trailing.text()).toBe('{"error":"not found"}');
+
+      const posted = await post('/version');
+      expect(posted.status).toBe(404);
+      expect(await posted.text()).toBe('{"error":"not found"}');
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
