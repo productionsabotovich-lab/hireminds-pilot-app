@@ -107,6 +107,59 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /healthz', () => {
+    it('returns 200 and the JSON body on an empty list', async () => {
+      const res = await get('/healthz');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"status":"ok"}');
+    });
+
+    it('returns the same answer on a filled list and on repeated requests', async () => {
+      await addTodo('Купить хлеб');
+      await addTodo('Позвонить врачу');
+      await post('/todos/1/complete');
+
+      const first = await get('/healthz');
+      expect(first.status).toBe(200);
+      expect(await first.text()).toBe('{"status":"ok"}');
+
+      const second = await get('/healthz');
+      expect(second.status).toBe(200);
+      expect(await second.text()).toBe('{"status":"ok"}');
+    });
+
+    it('does not change the todos and does not consume the next id', async () => {
+      await addTodo('a');
+      await addTodo('b');
+
+      const before = await (await get('/todos')).text();
+      await get('/healthz');
+      const after = await (await get('/todos')).text();
+      expect(after).toBe(before);
+
+      const created = await post('/todos', { title: 'c' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'c', done: false });
+    });
+
+    it('ignores query parameters', async () => {
+      const res = await get('/healthz?probe=1');
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('{"status":"ok"}');
+    });
+
+    it('keeps the existing 404 for other methods and paths', async () => {
+      const posted = await post('/healthz');
+      expect(posted.status).toBe(404);
+      expect(await posted.text()).toBe('{"error":"not found"}');
+
+      const trailing = await get('/healthz/');
+      expect(trailing.status).toBe(404);
+      expect(await trailing.text()).toBe('{"error":"not found"}');
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
