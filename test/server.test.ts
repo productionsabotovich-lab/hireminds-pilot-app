@@ -41,6 +41,73 @@ describe('server routes', () => {
     expect(res.status).toBe(201);
   }
 
+  describe('GET /info', () => {
+    it('returns the service name', async () => {
+      const res = await get('/info');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"service":"todo-api"}');
+    });
+
+    it('returns exactly one key with a string value', async () => {
+      const body = (await (await get('/info')).json()) as Record<string, unknown>;
+      expect(Object.keys(body)).toEqual(['service']);
+      expect(body.service).toBe('todo-api');
+      expect(typeof body.service).toBe('string');
+    });
+
+    it('ignores query parameters', async () => {
+      const plain = await (await get('/info')).text();
+      const probed = await (await get('/info?probe=1')).text();
+      expect(probed).toBe(plain);
+      expect(probed).toBe('{"service":"todo-api"}');
+    });
+
+    it('does not change the list', async () => {
+      await addTodo('a');
+      await post('/todos/1/complete');
+
+      const before = await (await get('/todos')).text();
+      await get('/info');
+      const after = await (await get('/todos')).text();
+      expect(after).toBe(before);
+    });
+
+    it('does not consume identifiers', async () => {
+      await get('/info');
+
+      const created = await post('/todos', { title: 'a' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 1, title: 'a', done: false });
+    });
+
+    it('returns the same answer regardless of the list state', async () => {
+      const empty = await (await get('/info')).text();
+
+      await addTodo('a');
+      await post('/todos/1/complete');
+      await addTodo('b');
+
+      const first = await (await get('/info')).text();
+      const second = await (await get('/info')).text();
+      expect(first).toBe(empty);
+      expect(second).toBe(first);
+      expect(first).toBe('{"service":"todo-api"}');
+    });
+
+    it('keeps the existing 404 for unsupported paths and methods', async () => {
+      const posted = await post('/info');
+      expect(posted.status).toBe(404);
+      expect(await posted.text()).toBe('{"error":"not found"}');
+
+      for (const path of ['/info/', '/Info', '/info/extra']) {
+        const res = await get(path);
+        expect(res.status).toBe(404);
+        expect(await res.text()).toBe('{"error":"not found"}');
+      }
+    });
+  });
+
   describe('GET /todos/stats', () => {
     it('returns zero counters for an empty list', async () => {
       const res = await get('/todos/stats');
