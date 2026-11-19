@@ -41,6 +41,64 @@ describe('server routes', () => {
     expect(res.status).toBe(201);
   }
 
+  describe('GET /health', () => {
+    async function expectHealthy(path = '/health'): Promise<void> {
+      const res = await get(path);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"status":"ok"}');
+    }
+
+    it('returns the exact health response for an empty list', async () => {
+      await expectHealthy();
+      expect(await (await get('/todos')).json()).toEqual([]);
+      const created = await post('/todos', { title: 'first' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 1, title: 'first', done: false });
+    });
+
+    it('returns the same response repeatedly without changing todos or IDs', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      expect((await post('/todos/1/complete')).status).toBe(200);
+      const before = await (await get('/todos')).text();
+      await expectHealthy();
+      await expectHealthy();
+      expect(await (await get('/todos')).text()).toBe(before);
+      const created = await post('/todos', { title: 'c' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'c', done: false });
+    });
+
+    it('ignores query parameters', async () => {
+      await expectHealthy('/health?probe=1');
+    });
+
+    it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD'])(
+      'keeps the existing 404 for %s without changing todos',
+      async (method) => {
+        await addTodo('a');
+        const before = await (await get('/todos')).text();
+        const res = await fetch(baseUrl + '/health', { method });
+        expect(res.status).toBe(404);
+        expect(await res.text()).toBe(method === 'HEAD' ? '' : '{"error":"not found"}');
+        expect(await (await get('/todos')).text()).toBe(before);
+      },
+    );
+
+    it.each(['/health/', '/health/extra'])(
+      'keeps the existing 404 for %s without changing todos',
+      async (path) => {
+        await addTodo('a');
+        const before = await (await get('/todos')).text();
+        const res = await get(path);
+        expect(res.status).toBe(404);
+        expect(await res.text()).toBe('{"error":"not found"}');
+        expect(await (await get('/todos')).text()).toBe(before);
+      },
+    );
+  });
+
   describe('GET /todos/stats', () => {
     it('returns zero counters for an empty list', async () => {
       const res = await get('/todos/stats');

@@ -22,6 +22,7 @@ npm run check                # проверить типы
 
 | Метод и путь | Что делает |
 | --- | --- |
+| `GET /health` | Проверка работоспособности: HTTP 200, `{"status":"ok"}` |
 | `GET /todos?filter=all\|open\|done` | Список дел |
 | `GET /todos/stats` | Сводка по делам: `total`, `open`, `done` |
 | `POST /todos` `{ "title": "..." }` | Добавить дело |
