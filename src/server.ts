@@ -1,8 +1,10 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /info, GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
 let state: TodoList = emptyList();
+
+const SERVICE_NAME = 'todo-api';
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -21,6 +23,9 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
   const complete = url.pathname.match(/^\/todos\/(\d+)\/complete$/);
   void (async () => {
     try {
+      if (req.method === 'GET' && url.pathname === '/info') {
+        return send(res, 200, { service: SERVICE_NAME });
+      }
       if (req.method === 'GET' && url.pathname === '/todos') {
         const filter = url.searchParams.get('filter');
         const allowed = filter === 'open' || filter === 'done' ? filter : 'all';
