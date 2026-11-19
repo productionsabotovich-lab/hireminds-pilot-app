@@ -22,6 +22,7 @@ npm run check                # проверить типы
 
 | Метод и путь | Что делает |
 | --- | --- |
+| `GET /readyz` | Проверка готовности сервиса: `{"ready":true}` |
 | `GET /todos?filter=all\|open\|done` | Список дел |
 | `GET /todos/stats` | Сводка по делам: `total`, `open`, `done` |
 | `POST /todos` `{ "title": "..." }` | Добавить дело |
