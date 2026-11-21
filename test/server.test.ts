@@ -107,6 +107,61 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /capabilities', () => {
+    it('returns the fixed capability list for an empty list', async () => {
+      const res = await get('/capabilities');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"capabilities":["todos"]}');
+    });
+
+    it('returns the same body for a filled list and repeated requests', async () => {
+      await addTodo('Купить хлеб');
+      await addTodo('Позвонить врачу');
+      const completed = await post('/todos/1/complete');
+      expect(completed.status).toBe(200);
+
+      const first = await get('/capabilities');
+      const second = await get('/capabilities');
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(await first.text()).toBe('{"capabilities":["todos"]}');
+      expect(await second.text()).toBe('{"capabilities":["todos"]}');
+    });
+
+    it('does not change the todos and does not consume the next id', async () => {
+      await addTodo('a');
+
+      const before = await (await get('/todos')).text();
+      const res = await get('/capabilities');
+      expect(res.status).toBe(200);
+      const after = await (await get('/todos')).text();
+      expect(after).toBe(before);
+
+      const created = await post('/todos', { title: 'b' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 2, title: 'b', done: false });
+    });
+
+    it('ignores query parameters', async () => {
+      const plain = await (await get('/capabilities')).text();
+      const probed = await get('/capabilities?probe=1');
+      expect(probed.status).toBe(200);
+      expect(await probed.text()).toBe(plain);
+      expect(plain).toBe('{"capabilities":["todos"]}');
+    });
+
+    it('keeps the existing 404 for non-GET methods and similar paths', async () => {
+      const posted = await post('/capabilities');
+      expect(posted.status).toBe(404);
+      expect(await posted.text()).toBe('{"error":"not found"}');
+
+      const trailing = await get('/capabilities/');
+      expect(trailing.status).toBe(404);
+      expect(await trailing.text()).toBe('{"error":"not found"}');
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
