@@ -1,8 +1,11 @@
 // HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// GET /capabilities — перечень возможностей API.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
 let state: TodoList = emptyList();
+
+const CAPABILITIES = ['todos'];
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -38,6 +41,9 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       if (req.method === 'POST' && complete) {
         state = completeTodo(state, Number(complete[1]));
         return send(res, 200, { ok: true });
+      }
+      if (req.method === 'GET' && url.pathname === '/capabilities') {
+        return send(res, 200, { capabilities: CAPABILITIES });
       }
       return send(res, 404, { error: 'not found' });
     } catch (error) {
