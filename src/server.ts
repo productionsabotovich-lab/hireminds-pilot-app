@@ -1,4 +1,4 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete, OPTIONS /todos.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
@@ -7,6 +7,12 @@ let state: TodoList = emptyList();
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
+}
+
+// Ответ без тела: 204 и перечисление поддерживаемых методов коллекции.
+function sendAllowed(res: ServerResponse): void {
+  res.writeHead(204, { allow: 'GET, POST, OPTIONS' });
+  res.end();
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -28,6 +34,9 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
+      }
+      if (req.method === 'OPTIONS' && url.pathname === '/todos') {
+        return sendAllowed(res);
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);

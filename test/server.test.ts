@@ -36,6 +36,10 @@ describe('server routes', () => {
     });
   }
 
+  async function options(path: string): Promise<Response> {
+    return fetch(`${baseUrl}${path}`, { method: 'OPTIONS' });
+  }
+
   async function addTodo(title: string): Promise<void> {
     const res = await post('/todos', { title });
     expect(res.status).toBe(201);
@@ -143,6 +147,58 @@ describe('server routes', () => {
       const res = await get('/todos/stats/');
       expect(res.status).toBe(404);
       expect(await res.text()).toBe('{"error":"not found"}');
+    });
+  });
+
+  describe('OPTIONS /todos', () => {
+    it('answers 204 with the allowed methods and an empty body', async () => {
+      const res = await options('/todos');
+      expect(res.status).toBe(204);
+      expect(res.headers.get('allow')).toBe('GET, POST, OPTIONS');
+      expect(await res.text()).toBe('');
+    });
+
+    it('keeps the list and the next id unchanged', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+      const before = await (await get('/todos')).text();
+
+      const first = await options('/todos');
+      expect(first.status).toBe(204);
+      expect(first.headers.get('allow')).toBe('GET, POST, OPTIONS');
+      expect(await first.text()).toBe('');
+
+      const second = await options('/todos');
+      expect(second.status).toBe(204);
+      expect(second.headers.get('allow')).toBe('GET, POST, OPTIONS');
+      expect(await second.text()).toBe('');
+
+      expect(await (await get('/todos')).text()).toBe(before);
+
+      const created = await post('/todos', { title: 'c' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'c', done: false });
+    });
+
+    it('ignores query parameters', async () => {
+      await addTodo('a');
+      const before = await (await get('/todos')).text();
+
+      const res = await options('/todos?filter=open');
+      expect(res.status).toBe(204);
+      expect(res.headers.get('allow')).toBe('GET, POST, OPTIONS');
+      expect(await res.text()).toBe('');
+
+      expect(await (await get('/todos')).text()).toBe(before);
+    });
+
+    it('keeps the existing 404 for other paths', async () => {
+      for (const path of ['/todos/', '/todos/stats', '/unknown']) {
+        const res = await options(path);
+        expect(res.status).toBe(404);
+        expect(await res.text()).toBe('{"error":"not found"}');
+      }
     });
   });
 });
