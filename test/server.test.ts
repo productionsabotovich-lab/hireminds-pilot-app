@@ -1,11 +1,13 @@
 // HTTP-поведение маршрутов. Состояние `state` — переменная модуля src/server.ts,
 // поэтому перед каждым кейсом реестр модулей сбрасывается и модуль импортируется заново.
 import { createServer, type Server } from 'node:http';
+import { connect } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 describe('server routes', () => {
   let server: Server;
   let baseUrl: string;
+  let port: number;
 
   beforeEach(async () => {
     vi.resetModules();
@@ -14,7 +16,8 @@ describe('server routes', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
     if (address === null || typeof address === 'string') throw new Error('server address is not available');
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    port = address.port;
+    baseUrl = `http://127.0.0.1:${port}`;
   });
 
   afterEach(async () => {
@@ -28,6 +31,10 @@ describe('server routes', () => {
     return fetch(`${baseUrl}${path}`);
   }
 
+  async function head(path: string): Promise<Response> {
+    return fetch(`${baseUrl}${path}`, { method: 'HEAD' });
+  }
+
   async function post(path: string, body?: unknown): Promise<Response> {
     return fetch(`${baseUrl}${path}`, {
       method: 'POST',
@@ -39,6 +46,39 @@ describe('server routes', () => {
   async function addTodo(title: string): Promise<void> {
     const res = await post('/todos', { title });
     expect(res.status).toBe(201);
+  }
+
+  // Сырой запрос через node:net: HTTP-клиент умеет скрывать тело HEAD-запроса,
+  // поэтому байты на проводе проверяются напрямую. Ожидание ограничено таймаутом,
+  // соединение закрывается при любом исходе.
+  async function rawRequest(method: string, path: string): Promise<string> {
+    const socket = connect(port, '127.0.0.1');
+    const chunks: Buffer[] = [];
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(`no response for ${method} ${path}`)), 2000);
+        const finish = (error?: Error): void => {
+          clearTimeout(timer);
+          if (error) reject(error);
+          else resolve();
+        };
+        socket.on('data', (chunk: Buffer) => chunks.push(chunk));
+        socket.once('error', finish);
+        socket.once('close', () => finish());
+        socket.once('connect', () => {
+          socket.write(`${method} ${path} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`);
+        });
+      });
+    } finally {
+      socket.destroy();
+    }
+    return Buffer.concat(chunks).toString('utf8');
+  }
+
+  function splitResponse(raw: string): { head: string; body: string } {
+    const separator = raw.indexOf('\r\n\r\n');
+    if (separator < 0) throw new Error(`response without a header block: ${raw}`);
+    return { head: raw.slice(0, separator), body: raw.slice(separator + 4) };
   }
 
   describe('GET /todos/stats', () => {
@@ -101,6 +141,101 @@ describe('server routes', () => {
     });
 
     it('keeps the existing 404 for non-GET methods', async () => {
+      const res = await post('/todos/stats');
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('{"error":"not found"}');
+    });
+  });
+
+  describe('HEAD /todos/stats', () => {
+    it('answers 200 with the GET headers and without a body', async () => {
+      const res = await head('/todos/stats');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('');
+
+      const getRes = await get('/todos/stats');
+      expect(res.headers.get('content-type')).toBe(getRes.headers.get('content-type'));
+    });
+
+    it('keeps the same contract for a list with open and done todos', async () => {
+      await addTodo('Купить хлеб');
+      await addTodo('Позвонить врачу');
+      await post('/todos/1/complete');
+
+      const res = await head('/todos/stats');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('');
+
+      const stats = await (await get('/todos/stats')).json();
+      expect(stats).toEqual({ total: 2, open: 1, done: 1 });
+    });
+
+    it('sends no body bytes on the wire', async () => {
+      await addTodo('a');
+      await post('/todos/1/complete');
+
+      const raw = splitResponse(await rawRequest('HEAD', '/todos/stats'));
+      expect(raw.head.split('\r\n')[0]).toBe('HTTP/1.1 200 OK');
+      expect(raw.head.toLowerCase()).toContain('content-type: application/json; charset=utf-8');
+      expect(raw.body).toBe('');
+
+      const getRaw = splitResponse(await rawRequest('GET', '/todos/stats'));
+      // GET отдаёт тело фрагментами (Transfer-Encoding: chunked), поэтому ищем JSON в теле.
+      expect(getRaw.body).toContain('{"total":1,"open":0,"done":1}');
+    });
+
+    it('does not change the list, the statistics or the next id', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+
+      const listBefore = await (await get('/todos')).text();
+      const statsBefore = await (await get('/todos/stats')).text();
+
+      expect((await head('/todos/stats')).status).toBe(200);
+      expect((await head('/todos/stats')).status).toBe(200);
+
+      const listAfter = await (await get('/todos')).text();
+      const statsAfter = await (await get('/todos/stats')).text();
+
+      expect(listAfter).toBe(listBefore);
+      expect(statsAfter).toBe(statsBefore);
+
+      const created = await post('/todos', { title: 'c' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'c', done: false });
+    });
+
+    it('ignores query parameters', async () => {
+      await addTodo('a');
+      await post('/todos/1/complete');
+
+      const plain = await head('/todos/stats');
+      const filtered = await head('/todos/stats?filter=open');
+      const unknown = await head('/todos/stats?unknown=1');
+
+      expect(plain.status).toBe(200);
+      expect(filtered.status).toBe(200);
+      expect(unknown.status).toBe(200);
+      expect(filtered.headers.get('content-type')).toBe(plain.headers.get('content-type'));
+      expect(unknown.headers.get('content-type')).toBe(plain.headers.get('content-type'));
+      expect(await filtered.text()).toBe('');
+      expect(await unknown.text()).toBe('');
+    });
+
+    it('keeps the 404 for other paths without a body', async () => {
+      const res = await head('/todos/stats/');
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('');
+
+      const other = await head('/todos');
+      expect(other.status).toBe(404);
+      expect(await other.text()).toBe('');
+    });
+
+    it('keeps the existing 404 for POST', async () => {
       const res = await post('/todos/stats');
       expect(res.status).toBe(404);
       expect(await res.text()).toBe('{"error":"not found"}');

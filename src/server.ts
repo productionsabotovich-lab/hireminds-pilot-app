@@ -1,12 +1,27 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, HEAD /todos/stats,
+// POST /todos, POST /todos/:id/complete.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
 let state: TodoList = emptyList();
 
+const jsonContentType = 'application/json; charset=utf-8';
+
 function send(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+  res.writeHead(status, { 'content-type': jsonContentType });
   res.end(JSON.stringify(body));
+}
+
+// HEAD: те же прикладные заголовки, что у GET, но без тела ответа.
+// Content-Length равен длине GET-представления, а не нулю:
+// см. RFC 9110, раздел 9.3.2 (HEAD).
+function sendHead(res: ServerResponse, status: number, body: unknown): void {
+  const payload = Buffer.from(JSON.stringify(body), 'utf8');
+  res.writeHead(status, {
+    'content-type': jsonContentType,
+    'content-length': String(payload.length),
+  });
+  res.end();
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -28,6 +43,9 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
+      }
+      if (req.method === 'HEAD' && url.pathname === '/todos/stats') {
+        return sendHead(res, 200, todoStats(state));
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);

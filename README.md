@@ -24,6 +24,7 @@ npm run check                # проверить типы
 | --- | --- |
 | `GET /todos?filter=all\|open\|done` | Список дел |
 | `GET /todos/stats` | Сводка по делам: `total`, `open`, `done` |
+| `HEAD /todos/stats` | Заголовки как у `GET /todos/stats`, тела нет |
 | `POST /todos` `{ "title": "..." }` | Добавить дело |
 | `POST /todos/:id/complete` | Отметить выполненным |
 
@@ -34,6 +35,9 @@ npm run check                # проверить типы
 $ curl -s http://127.0.0.1:3000/todos/stats
 {"total":3,"open":2,"done":1}
 ```
+
+`HEAD /todos/stats` отвечает 200 с теми же заголовками, что и `GET /todos/stats`, но без тела:
+клиент получает метаданные ответа, не загружая саму статистику. Запрос ничего не меняет.
 
 Состояние хранится в памяти процесса и теряется при перезапуске.
 
