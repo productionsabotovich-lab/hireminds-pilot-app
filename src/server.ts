@@ -1,6 +1,15 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, GET /todos/:id,
+// POST /todos, POST /todos/:id/complete.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
+import {
+  addTodo,
+  completeTodo,
+  emptyList,
+  findTodo,
+  listTodos,
+  todoStats,
+  type TodoList,
+} from './todos.js';
 
 let state: TodoList = emptyList();
 
@@ -19,6 +28,7 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 export function handle(req: IncomingMessage, res: ServerResponse): void {
   const url = new URL(req.url ?? '/', 'http://localhost');
   const complete = url.pathname.match(/^\/todos\/(\d+)\/complete$/);
+  const todoById = url.pathname.match(/^\/todos\/(\d+)$/);
   void (async () => {
     try {
       if (req.method === 'GET' && url.pathname === '/todos') {
@@ -28,6 +38,11 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
+      }
+      if (req.method === 'GET' && todoById) {
+        const todo = findTodo(state, Number(todoById[1]));
+        if (!todo) return send(res, 404, { error: 'not found' });
+        return send(res, 200, todo);
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);

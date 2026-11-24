@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTodo, completeTodo, emptyList, listTodos, todoStats } from '../src/todos.js';
+import { addTodo, completeTodo, emptyList, findTodo, listTodos, todoStats } from '../src/todos.js';
 
 describe('todos', () => {
   it('adds a todo with a sequential id', () => {
@@ -23,6 +23,50 @@ describe('todos', () => {
 
   it('fails to complete an unknown todo', () => {
     expect(() => completeTodo(emptyList(), 9)).toThrow('todo 9 not found');
+  });
+});
+
+describe('findTodo', () => {
+  function listWithTwo(): ReturnType<typeof addTodo>['list'] {
+    let { list } = addTodo(emptyList(), 'a');
+    list = addTodo(list, 'b').list;
+    return list;
+  }
+
+  it('finds a todo by its id', () => {
+    expect(findTodo(listWithTwo(), 2)).toEqual({ id: 2, title: 'b', done: false });
+  });
+
+  it('returns undefined for an unknown id', () => {
+    expect(findTodo(listWithTwo(), 9)).toBeUndefined();
+    expect(findTodo(emptyList(), 1)).toBeUndefined();
+  });
+
+  it('returns the current done flag', () => {
+    const list = completeTodo(listWithTwo(), 1);
+    expect(findTodo(list, 1)).toEqual({ id: 1, title: 'a', done: true });
+  });
+
+  it('does not match an unsafe integer to an existing todo', () => {
+    const unsafe = Number('9007199254740993');
+    expect(Number.isSafeInteger(unsafe)).toBe(false);
+    expect(findTodo(listWithTwo(), unsafe)).toBeUndefined();
+  });
+
+  it('does not mutate the list', () => {
+    const list = listWithTwo();
+    const items = list.items;
+    const nextId = list.nextId;
+
+    findTodo(list, 1);
+    findTodo(list, 9);
+
+    expect(list.items).toBe(items);
+    expect(list.nextId).toBe(nextId);
+    expect(list.items.map((t) => ({ ...t }))).toEqual([
+      { id: 1, title: 'a', done: false },
+      { id: 2, title: 'b', done: false },
+    ]);
   });
 });
 

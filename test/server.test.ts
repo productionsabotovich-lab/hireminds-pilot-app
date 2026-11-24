@@ -107,6 +107,128 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /todos/:id', () => {
+    it('returns a todo by the id returned on creation', async () => {
+      const first = await post('/todos', { title: 'Купить хлеб' });
+      const second = await post('/todos', { title: 'Позвонить врачу' });
+      const firstId = ((await first.json()) as { id: number }).id;
+      const secondId = ((await second.json()) as { id: number }).id;
+      expect(firstId).not.toBe(secondId);
+
+      const res = await get(`/todos/${firstId}`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.json()).toEqual({ id: firstId, title: 'Купить хлеб', done: false });
+
+      const other = await get(`/todos/${secondId}`);
+      expect(other.status).toBe(200);
+      expect(await other.json()).toEqual({ id: secondId, title: 'Позвонить врачу', done: false });
+    });
+
+    it('returns the current done flag of a completed todo', async () => {
+      await addTodo('a');
+      const completed = await post('/todos/1/complete');
+      expect(completed.status).toBe(200);
+
+      const res = await get('/todos/1');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ id: 1, title: 'a', done: true });
+    });
+
+    it('returns 404 for a missing todo in an empty and in a non-empty list', async () => {
+      const empty = await get('/todos/1');
+      expect(empty.status).toBe(404);
+      expect(empty.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await empty.text()).toBe('{"error":"not found"}');
+
+      await addTodo('a');
+      const missing = await get('/todos/2');
+      expect(missing.status).toBe(404);
+      expect(await missing.text()).toBe('{"error":"not found"}');
+    });
+
+    it('ignores query parameters and accepts leading zeros', async () => {
+      await addTodo('a');
+
+      const plain = await get('/todos/1');
+      const query = await get('/todos/1?filter=done');
+      const zeros = await get('/todos/01');
+
+      expect(plain.status).toBe(200);
+      expect(query.status).toBe(200);
+      expect(zeros.status).toBe(200);
+      expect(await query.json()).toEqual({ id: 1, title: 'a', done: false });
+      expect(await zeros.json()).toEqual({ id: 1, title: 'a', done: false });
+    });
+
+    it('keeps 404 for ids that match no todo', async () => {
+      await addTodo('a');
+
+      const paths = [
+        '/todos/0',
+        '/todos/2',
+        '/todos/abc',
+        '/todos/-1',
+        '/todos/1.5',
+        '/todos/1/',
+        '/todos/9007199254740993',
+      ];
+      for (const path of paths) {
+        const res = await get(path);
+        expect(res.status).toBe(404);
+        expect(await res.text()).toBe('{"error":"not found"}');
+      }
+    });
+
+    it('keeps 404 for non-GET methods and does not change the list', async () => {
+      await addTodo('a');
+
+      const res = await post('/todos/1', { title: 'b' });
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('{"error":"not found"}');
+
+      const list = await (await get('/todos')).json();
+      expect(list).toEqual([{ id: 1, title: 'a', done: false }]);
+    });
+
+    it('does not change the list, the stats or the id sequence', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+
+      const listBefore = await (await get('/todos')).text();
+      const statsBefore = await (await get('/todos/stats')).text();
+
+      await get('/todos/1');
+      await get('/todos/9');
+
+      const listAfter = await (await get('/todos')).text();
+      const statsAfter = await (await get('/todos/stats')).text();
+
+      expect(listAfter).toBe(listBefore);
+      expect(statsAfter).toBe(statsBefore);
+      expect(statsAfter).toBe('{"total":2,"open":1,"done":1}');
+
+      const created = await post('/todos', { title: 'c' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'c', done: false });
+    });
+
+    it('keeps the stats route exact', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+
+      const stats = await get('/todos/stats');
+      expect(stats.status).toBe(200);
+      expect(await stats.json()).toEqual({ total: 2, open: 1, done: 1 });
+
+      const filtered = await get('/todos/stats?filter=open');
+      expect(filtered.status).toBe(200);
+      expect(await filtered.json()).toEqual({ total: 2, open: 1, done: 1 });
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
