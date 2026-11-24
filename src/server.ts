@@ -4,8 +4,11 @@ import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList }
 
 let state: TodoList = emptyList();
 
-function send(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
+// Версия списка дел: неизменное значение, отдаётся только успешным ответом GET /todos.
+const TODO_API_VERSION = '1';
+
+function send(res: ServerResponse, status: number, body: unknown, headers: Record<string, string> = {}): void {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', ...headers });
   res.end(JSON.stringify(body));
 }
 
@@ -24,7 +27,7 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       if (req.method === 'GET' && url.pathname === '/todos') {
         const filter = url.searchParams.get('filter');
         const allowed = filter === 'open' || filter === 'done' ? filter : 'all';
-        return send(res, 200, listTodos(state, allowed));
+        return send(res, 200, listTodos(state, allowed), { 'X-Todo-Api-Version': TODO_API_VERSION });
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
