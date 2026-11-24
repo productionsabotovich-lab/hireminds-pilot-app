@@ -35,6 +35,31 @@ $ curl -s http://127.0.0.1:3000/todos/stats
 {"total":3,"open":2,"done":1}
 ```
 
+Пустой заголовок отклоняется: `POST /todos` отвечает `400 Bad Request`, дело не создаётся
+и идентификатор не расходуется. Строка из одних пробельных символов считается пустой.
+
+```
+$ curl -i -X POST http://127.0.0.1:3000/todos \
+  -H 'Content-Type: application/json' \
+  -d '{"title":""}'
+HTTP/1.1 400 Bad Request
+Content-Type: application/json; charset=utf-8
+
+{"error":"title is empty"}
+```
+
+Корректный заголовок обрезается по краям, дело создаётся с ответом `201 Created`:
+
+```
+$ curl -i -X POST http://127.0.0.1:3000/todos \
+  -H 'Content-Type: application/json' \
+  -d '{"title":" Купить хлеб "}'
+HTTP/1.1 201 Created
+Content-Type: application/json; charset=utf-8
+
+{"id":1,"title":"Купить хлеб","done":false}
+```
+
 Состояние хранится в памяти процесса и теряется при перезапуске.
 
 ## Структура
