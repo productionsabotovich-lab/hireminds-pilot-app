@@ -1,6 +1,6 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, GET /todos/stats.txt, POST /todos, POST /todos/:id/complete.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
+import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList, type TodoStats } from './todos.js';
 
 let state: TodoList = emptyList();
 
@@ -9,11 +9,27 @@ function send(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// Текстовый ответ: тело отдаётся как есть, Content-Length — число байтов UTF-8 без заголовков.
+function sendText(res: ServerResponse, status: number, body: string): void {
+  const payload = Buffer.from(body, 'utf8');
+  res.writeHead(status, {
+    'content-type': 'text/plain; charset=utf-8',
+    'content-length': String(payload.byteLength),
+  });
+  res.end(payload);
+}
+
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
   const text = Buffer.concat(chunks).toString('utf8');
   return text.length === 0 ? {} : (JSON.parse(text) as Record<string, unknown>);
+}
+
+// Текстовая сводка для терминала мониторинга: три строки `имя: число` в порядке
+// total, open, done, разделитель строк LF. Числа те же, что в GET /todos/stats.
+function statsText(stats: TodoStats): string {
+  return `total: ${stats.total}\nopen: ${stats.open}\ndone: ${stats.done}\n`;
 }
 
 export function handle(req: IncomingMessage, res: ServerResponse): void {
@@ -28,6 +44,9 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
+      }
+      if (req.method === 'GET' && url.pathname === '/todos/stats.txt') {
+        return sendText(res, 200, statsText(todoStats(state)));
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);

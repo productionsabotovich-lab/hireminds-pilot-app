@@ -24,6 +24,7 @@ npm run check                # проверить типы
 | --- | --- |
 | `GET /todos?filter=all\|open\|done` | Список дел |
 | `GET /todos/stats` | Сводка по делам: `total`, `open`, `done` |
+| `GET /todos/stats.txt` | Та же сводка текстом: по строке на счётчик |
 | `POST /todos` `{ "title": "..." }` | Добавить дело |
 | `POST /todos/:id/complete` | Отметить выполненным |
 
@@ -33,6 +34,18 @@ npm run check                # проверить типы
 ```
 $ curl -s http://127.0.0.1:3000/todos/stats
 {"total":3,"open":2,"done":1}
+```
+
+Текстовая сводка `GET /todos/stats.txt` отдаёт те же счётчики для того же состояния списка
+в виде текста UTF-8 (`text/plain; charset=utf-8`): три строки в порядке `total`, `open`, `done`,
+разделитель строк — LF. Значения совпадают с JSON-сводкой, query-параметры игнорируются,
+запрос ничего не меняет:
+
+```
+$ curl -s http://127.0.0.1:3000/todos/stats.txt
+total: 3
+open: 2
+done: 1
 ```
 
 Состояние хранится в памяти процесса и теряется при перезапуске.
