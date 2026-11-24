@@ -107,6 +107,22 @@ describe('server routes', () => {
     });
   });
 
+  // Пустое хранилище: фикстура группы server routes только запускает сервер на новом
+  // экземпляре модуля, задачи внутри сценария не создаются.
+  describe('GET /todos', () => {
+    it('returns an empty array for an empty storage', async () => {
+      const first = await get('/todos');
+      expect(first.status).toBe(200);
+      expect(first.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await first.text()).toBe('[]');
+
+      const second = await get('/todos');
+      expect(second.status).toBe(200);
+      expect(second.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await second.text()).toBe('[]');
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
