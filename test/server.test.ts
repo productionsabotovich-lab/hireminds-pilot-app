@@ -107,6 +107,104 @@ describe('server routes', () => {
     });
   });
 
+  describe('POST /todos validation', () => {
+    const emptyTitles = ['', '   ', '\t', '\t\t', '\n', '\n\n', '\r', '\r\n', '\t\r\n', '\u00a0'];
+
+    async function listText(): Promise<string> {
+      const res = await get('/todos');
+      expect(res.status).toBe(200);
+      return res.text();
+    }
+
+    async function statsText(): Promise<string> {
+      const res = await get('/todos/stats');
+      expect(res.status).toBe(200);
+      return res.text();
+    }
+
+    it.each(emptyTitles)('rejects a whitespace-only title %j in an empty list', async (title) => {
+      const before = await listText();
+      const beforeStats = await statsText();
+      expect(before).toBe('[]');
+      expect(beforeStats).toBe('{"total":0,"open":0,"done":0}');
+
+      const res = await post('/todos', { title });
+      expect(res.status).toBe(400);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"error":"title is empty"}');
+
+      expect(await listText()).toBe(before);
+      expect(await statsText()).toBe(beforeStats);
+
+      const created = await post('/todos', { title: 'Купить хлеб' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 1, title: 'Купить хлеб', done: false });
+    });
+
+    it.each(emptyTitles)('rejects a whitespace-only title %j in a non-empty list', async (title) => {
+      const first = await post('/todos', { title: 'Купить хлеб' });
+      expect(first.status).toBe(201);
+      const second = await post('/todos', { title: 'Позвонить врачу' });
+      expect(second.status).toBe(201);
+      const completed = await post('/todos/1/complete');
+      expect(completed.status).toBe(200);
+
+      const before = await listText();
+      const beforeStats = await statsText();
+      expect(before).toBe(
+        '[{"id":1,"title":"Купить хлеб","done":true},{"id":2,"title":"Позвонить врачу","done":false}]',
+      );
+      expect(beforeStats).toBe('{"total":2,"open":1,"done":1}');
+
+      const res = await post('/todos', { title });
+      expect(res.status).toBe(400);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"error":"title is empty"}');
+
+      expect(await listText()).toBe(before);
+      expect(await statsText()).toBe(beforeStats);
+
+      const created = await post('/todos', { title: 'Купить молоко' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'Купить молоко', done: false });
+      expect(await listText()).toBe(
+        '[{"id":1,"title":"Купить хлеб","done":true},{"id":2,"title":"Позвонить врачу","done":false},' +
+          '{"id":3,"title":"Купить молоко","done":false}]',
+      );
+      expect(await statsText()).toBe('{"total":3,"open":2,"done":1}');
+    });
+
+    it('trims the edges of a valid title and keeps internal spaces', async () => {
+      const res = await post('/todos', { title: '  Купить  хлеб  ' });
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({ id: 1, title: 'Купить  хлеб', done: false });
+    });
+
+    it('rejects a request without a title', async () => {
+      const res = await post('/todos', {});
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe('{"error":"title is empty"}');
+    });
+
+    it('rejects a request with a null title', async () => {
+      const res = await post('/todos', { title: null });
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe('{"error":"title is empty"}');
+    });
+
+    it('keeps the existing conversion of a numeric title', async () => {
+      const res = await post('/todos', { title: 42 });
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({ id: 1, title: '42', done: false });
+    });
+
+    it('ignores extra fields of the request', async () => {
+      const res = await post('/todos', { title: 'Купить хлеб', done: true, extra: 1 });
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual({ id: 1, title: 'Купить хлеб', done: false });
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
