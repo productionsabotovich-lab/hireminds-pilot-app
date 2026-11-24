@@ -22,6 +22,13 @@ export function completeTodo(list: TodoList, id: number): TodoList {
   return { ...list, items: list.items.map((t) => (t.id === id ? { ...t, done: true } : t)) };
 }
 
+// Поиск дела по точному числовому ID. Значение вне безопасного для JavaScript
+// диапазона не округляется до ID существующего дела и не совпадает ни с одним.
+export function findTodo(list: TodoList, id: number): Todo | undefined {
+  if (!Number.isSafeInteger(id)) return undefined;
+  return list.items.find((t) => t.id === id);
+}
+
 export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all'): Todo[] {
   if (filter === 'open') return list.items.filter((t) => !t.done);
   if (filter === 'done') return list.items.filter((t) => t.done);
