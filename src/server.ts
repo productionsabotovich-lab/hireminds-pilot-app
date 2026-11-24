@@ -1,8 +1,12 @@
 // HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// Перечень форматов ответа — свойство API: GET /formats, ответ не зависит от состояния списка дел.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
 let state: TodoList = emptyList();
+
+// Перечень поддерживаемых форматов ответа — константа API, состояние списка дел не читается.
+const RESPONSE_FORMATS = ['json'];
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -28,6 +32,9 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
+      }
+      if (req.method === 'GET' && url.pathname === '/formats') {
+        return send(res, 200, { formats: RESPONSE_FORMATS });
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);

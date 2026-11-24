@@ -107,6 +107,37 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /formats', () => {
+    it('returns the same formats list for any state of the todos and changes nothing', async () => {
+      const empty = await get('/formats');
+      expect(empty.status).toBe(200);
+      expect(empty.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      const emptyBody = await empty.text();
+      expect(emptyBody).toBe('{"formats":["json"]}');
+
+      await addTodo('Купить хлеб');
+      await addTodo('Позвонить врачу');
+      const completed = await post('/todos/1/complete');
+      expect(completed.status).toBe(200);
+
+      const todosBefore = await (await get('/todos')).text();
+      const statsBefore = await (await get('/todos/stats')).text();
+
+      const filled = await get('/formats');
+      expect(filled.status).toBe(200);
+      expect(filled.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      const filledBody = await filled.text();
+      expect(filledBody).toBe(emptyBody);
+
+      expect(await (await get('/todos')).text()).toBe(todosBefore);
+      expect(await (await get('/todos/stats')).text()).toBe(statsBefore);
+
+      const created = await post('/todos', { title: 'Ещё дело' });
+      expect(created.status).toBe(201);
+      expect(await created.json()).toEqual({ id: 3, title: 'Ещё дело', done: false });
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
