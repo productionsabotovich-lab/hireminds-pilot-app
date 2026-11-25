@@ -22,10 +22,33 @@ export function completeTodo(list: TodoList, id: number): TodoList {
   return { ...list, items: list.items.map((t) => (t.id === id ? { ...t, done: true } : t)) };
 }
 
-export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all'): Todo[] {
-  if (filter === 'open') return list.items.filter((t) => !t.done);
-  if (filter === 'done') return list.items.filter((t) => t.done);
-  return list.items;
+// Разбор query-параметра limit: только десятичные цифры ASCII и положительное
+// безопасное целое число. Отсутствие параметра — отсутствие ограничения,
+// недопустимое значение — ошибка с точным текстом из контракта.
+export function parseLimit(raw: string | null): number | undefined {
+  if (raw === null) return undefined;
+  if (!/^[0-9]+$/.test(raw)) throw new Error('limit must be a positive safe integer');
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error('limit must be a positive safe integer');
+  return value;
+}
+
+// Список дел: сначала фильтр по состоянию, затем первые limit элементов результата.
+// Порядок исходного списка сохраняется, вход не мутируется.
+export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all', limit?: number): Todo[] {
+  const matches = (todo: Todo): boolean => {
+    if (filter === 'open') return !todo.done;
+    if (filter === 'done') return todo.done;
+    return true;
+  };
+  const items: Todo[] = [];
+  for (const todo of list.items) {
+    if (!matches(todo)) continue;
+    items.push(todo);
+    // Отбор прекращается, как только набрано нужное число совпадений.
+    if (limit !== undefined && items.length >= limit) break;
+  }
+  return items;
 }
 
 // Сводка по списку: всего, открыто и выполнено. Счёт по флагу done, вход не мутируется.
