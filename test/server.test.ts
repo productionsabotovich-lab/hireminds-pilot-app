@@ -145,4 +145,142 @@ describe('server routes', () => {
       expect(await res.text()).toBe('{"error":"not found"}');
     });
   });
+
+  describe('GET /todos with limit', () => {
+    // Смешанный список из критериев приёмки: A и C выполнены, B и D открыты.
+    const todoA = { id: 1, title: 'A', done: true };
+    const todoB = { id: 2, title: 'B', done: false };
+    const todoC = { id: 3, title: 'C', done: true };
+    const todoD = { id: 4, title: 'D', done: false };
+
+    async function seedMixedList(): Promise<void> {
+      await addTodo('A');
+      await addTodo('B');
+      await addTodo('C');
+      await addTodo('D');
+      await post('/todos/1/complete');
+      await post('/todos/3/complete');
+    }
+
+    async function expectJson(path: string, expected: unknown): Promise<void> {
+      const res = await get(path);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.json()).toEqual(expected);
+    }
+
+    it('keeps the previous behaviour without a limit', async () => {
+      await seedMixedList();
+      await expectJson('/todos', [todoA, todoB, todoC, todoD]);
+      await expectJson('/todos?filter=open', [todoB, todoD]);
+    });
+
+    it('returns the first items of the list', async () => {
+      await seedMixedList();
+      await expectJson('/todos?limit=2', [todoA, todoB]);
+      await expectJson('/todos?filter=all&limit=2', [todoA, todoB]);
+    });
+
+    it('applies the filter before the limit', async () => {
+      await seedMixedList();
+      await expectJson('/todos?filter=open&limit=1', [todoB]);
+      await expectJson('/todos?filter=done&limit=1', [todoA]);
+    });
+
+    it('ignores an unknown or empty filter', async () => {
+      await seedMixedList();
+      await expectJson('/todos?filter=other&limit=1', [todoA]);
+      await expectJson('/todos?filter=&limit=1', [todoA]);
+    });
+
+    it('returns all matching todos when there are fewer than the limit', async () => {
+      await seedMixedList();
+      await expectJson('/todos?filter=open&limit=2', [todoB, todoD]);
+      await expectJson('/todos?filter=open&limit=10', [todoB, todoD]);
+    });
+
+    it('accepts the largest safe integer as a limit', async () => {
+      await seedMixedList();
+      await expectJson('/todos?limit=9007199254740991', [todoA, todoB, todoC, todoD]);
+    });
+
+    it('returns an empty array for an empty list and for no matches', async () => {
+      await expectJson('/todos?limit=3', []);
+
+      await addTodo('X');
+      await expectJson('/todos?filter=done&limit=3', []);
+    });
+
+    it('does not depend on the order of the query parameters', async () => {
+      await seedMixedList();
+      await expectJson('/todos?limit=1&filter=open', [todoB]);
+      await expectJson('/todos?filter=open&limit=1', [todoB]);
+    });
+
+    it('rejects an invalid limit with 400', async () => {
+      const invalid = [
+        'limit',
+        'limit=',
+        'limit=0',
+        'limit=-1',
+        'limit=1.5',
+        'limit=%2B1',
+        'limit=%201',
+        'limit=1e2',
+        'limit=0x10',
+        'limit=abc',
+        'limit=2abc',
+        'limit=9007199254740992',
+      ];
+      for (const query of invalid) {
+        const res = await get(`/todos?${query}`);
+        expect(res.status).toBe(400);
+        expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+        expect(await res.text()).toBe('{"error":"limit must be a positive safe integer"}');
+      }
+    });
+
+    it('rejects an invalid limit even for an empty list', async () => {
+      const res = await get('/todos?limit=0');
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe('{"error":"limit must be a positive safe integer"}');
+    });
+
+    it('accepts leading zeros and uses the first value of a repeated limit', async () => {
+      await seedMixedList();
+      await expectJson('/todos?limit=01', [todoA]);
+      await expectJson('/todos?limit=1&limit=2', [todoA]);
+
+      const res = await get('/todos?limit=&limit=2');
+      expect(res.status).toBe(400);
+      expect(await res.text()).toBe('{"error":"limit must be a positive safe integer"}');
+    });
+
+    it('does not change the stored list', async () => {
+      await seedMixedList();
+
+      await expectJson('/todos?limit=1', [todoA]);
+      await expectJson('/todos', [todoA, todoB, todoC, todoD]);
+      await expectJson('/todos/stats', { total: 4, open: 2, done: 2 });
+
+      await addTodo('E');
+      await expectJson('/todos', [todoA, todoB, todoC, todoD, { id: 5, title: 'E', done: false }]);
+    });
+
+    it('does not change the stored list after an invalid limit', async () => {
+      await seedMixedList();
+
+      const res = await get('/todos?limit=0');
+      expect(res.status).toBe(400);
+
+      await expectJson('/todos', [todoA, todoB, todoC, todoD]);
+      await expectJson('/todos/stats', { total: 4, open: 2, done: 2 });
+    });
+
+    it('ignores the limit in the statistics route', async () => {
+      await seedMixedList();
+      await expectJson('/todos/stats?limit=1', { total: 4, open: 2, done: 2 });
+      await expectJson('/todos/stats?limit=0', { total: 4, open: 2, done: 2 });
+    });
+  });
 });
