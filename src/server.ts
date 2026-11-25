@@ -1,4 +1,4 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, GET /todos/stats.tsv, POST /todos, POST /todos/:id/complete.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
@@ -7,6 +7,11 @@ let state: TodoList = emptyList();
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(body));
+}
+
+function sendTsv(res: ServerResponse, body: string): void {
+  res.writeHead(200, { 'content-type': 'text/tab-separated-values; charset=utf-8' });
+  res.end(body);
 }
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -28,6 +33,11 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
+      }
+      if (req.method === 'GET' && url.pathname === '/todos/stats.tsv') {
+        const { total, open, done } = todoStats(state);
+        // Первый круг выпуска: строка чисел пока без завершающего LF (docs/PIL-70.md).
+        return sendTsv(res, `total\topen\tdone\n${total}\t${open}\t${done}`);
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);

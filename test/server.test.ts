@@ -107,6 +107,91 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /todos/stats.tsv', () => {
+    it('returns the header row and zero counters for an empty list', async () => {
+      const res = await get('/todos/stats.tsv');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('text/tab-separated-values; charset=utf-8');
+      expect(await res.text()).toBe('total\topen\tdone\n0\t0\t0');
+    });
+
+    it('returns counters of a mixed list in the header order', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await addTodo('c');
+      await post('/todos/1/complete');
+
+      const res = await get('/todos/stats.tsv');
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('total\topen\tdone\n3\t2\t1');
+    });
+
+    it('matches the JSON statistics for the same list', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await addTodo('c');
+      await post('/todos/2/complete');
+
+      const stats = (await (await get('/todos/stats')).json()) as {
+        total: number;
+        open: number;
+        done: number;
+      };
+      const res = await get('/todos/stats.tsv');
+      expect(await res.text()).toBe(`total\topen\tdone\n${stats.total}\t${stats.open}\t${stats.done}`);
+    });
+
+    it('reflects the current state of the list', async () => {
+      await addTodo('a');
+      expect(await (await get('/todos/stats.tsv')).text()).toBe('total\topen\tdone\n1\t1\t0');
+
+      await post('/todos/1/complete');
+      expect(await (await get('/todos/stats.tsv')).text()).toBe('total\topen\tdone\n1\t0\t1');
+
+      await addTodo('b');
+      expect(await (await get('/todos/stats.tsv')).text()).toBe('total\topen\tdone\n2\t1\t1');
+    });
+
+    it('does not change the todos and returns the same body on repeated reads', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+
+      const before = await (await get('/todos')).text();
+      const first = await (await get('/todos/stats.tsv')).text();
+      const second = await (await get('/todos/stats.tsv')).text();
+      const after = await (await get('/todos')).text();
+
+      expect(after).toBe(before);
+      expect(second).toBe(first);
+      expect(first).toBe('total\topen\tdone\n2\t1\t1');
+    });
+
+    it('ignores query parameters', async () => {
+      await addTodo('a');
+      await post('/todos/1/complete');
+
+      const plain = await (await get('/todos/stats.tsv')).text();
+      const filtered = await (await get('/todos/stats.tsv?filter=open')).text();
+      const unknown = await (await get('/todos/stats.tsv?unknown=1')).text();
+      expect(filtered).toBe(plain);
+      expect(unknown).toBe(plain);
+      expect(plain).toBe('total\topen\tdone\n1\t0\t1');
+    });
+
+    it('keeps the existing 404 for non-GET methods', async () => {
+      const res = await post('/todos/stats.tsv');
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('{"error":"not found"}');
+    });
+
+    it('keeps the existing 404 for a trailing slash', async () => {
+      const res = await get('/todos/stats.tsv/');
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('{"error":"not found"}');
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
