@@ -107,6 +107,124 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /todos/stats.tsv', () => {
+    it('returns the header row and zero counters for an empty list', async () => {
+      const res = await get('/todos/stats.tsv');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('text/tab-separated-values; charset=utf-8');
+      expect(await res.text()).toBe('total\topen\tdone\n0\t0\t0\n');
+    });
+
+    it('returns counters of a mixed list in the header order', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await addTodo('c');
+      await post('/todos/1/complete');
+
+      const res = await get('/todos/stats.tsv');
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('total\topen\tdone\n3\t2\t1\n');
+    });
+
+    it('matches the JSON statistics for the same list', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await addTodo('c');
+      await post('/todos/2/complete');
+
+      const stats = (await (await get('/todos/stats')).json()) as {
+        total: number;
+        open: number;
+        done: number;
+      };
+      const res = await get('/todos/stats.tsv');
+      expect(await res.text()).toBe(`total\topen\tdone\n${stats.total}\t${stats.open}\t${stats.done}\n`);
+    });
+
+    it('reflects the current state of the list', async () => {
+      await addTodo('a');
+      expect(await (await get('/todos/stats.tsv')).text()).toBe('total\topen\tdone\n1\t1\t0\n');
+
+      await post('/todos/1/complete');
+      expect(await (await get('/todos/stats.tsv')).text()).toBe('total\topen\tdone\n1\t0\t1\n');
+
+      await addTodo('b');
+      expect(await (await get('/todos/stats.tsv')).text()).toBe('total\topen\tdone\n2\t1\t1\n');
+    });
+
+    it('does not change the todos and returns the same body on repeated reads', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+
+      const before = await (await get('/todos')).text();
+      const first = await (await get('/todos/stats.tsv')).text();
+      const second = await (await get('/todos/stats.tsv')).text();
+      const after = await (await get('/todos')).text();
+
+      expect(after).toBe(before);
+      expect(second).toBe(first);
+      expect(first).toBe('total\topen\tdone\n2\t1\t1\n');
+    });
+
+    it('ignores query parameters', async () => {
+      await addTodo('a');
+      await post('/todos/1/complete');
+
+      const plain = await (await get('/todos/stats.tsv')).text();
+      const filtered = await (await get('/todos/stats.tsv?filter=open')).text();
+      const unknown = await (await get('/todos/stats.tsv?unknown=1')).text();
+      expect(filtered).toBe(plain);
+      expect(unknown).toBe(plain);
+      expect(plain).toBe('total\topen\tdone\n1\t0\t1\n');
+    });
+
+    it('keeps the existing 404 for non-GET methods', async () => {
+      const res = await post('/todos/stats.tsv');
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('{"error":"not found"}');
+    });
+
+    it('keeps the existing 404 for a trailing slash', async () => {
+      const res = await get('/todos/stats.tsv/');
+      expect(res.status).toBe(404);
+      expect(await res.text()).toBe('{"error":"not found"}');
+    });
+
+    // Отдельная проверка точного тела для табличного импорта: сравнение полной
+    // строки без trim и нормализации переводов строк отклоняет отсутствие LF,
+    // двойной LF, CRLF, BOM, лишние пробелы и колонки.
+    it('returns exactly the body a line-based importer expects', async () => {
+      const empty = await get('/todos/stats.tsv');
+      expect(empty.status).toBe(200);
+      expect(Buffer.from(await empty.arrayBuffer())).toEqual(
+        Buffer.from('total\topen\tdone\n0\t0\t0\n', 'utf8'),
+      );
+
+      await addTodo('a');
+      await addTodo('b');
+      await addTodo('c');
+      await post('/todos/1/complete');
+
+      const res = await get('/todos/stats.tsv');
+      expect(res.status).toBe(200);
+      const bytes = Buffer.from(await res.arrayBuffer());
+      expect(bytes).toEqual(Buffer.from('total\topen\tdone\n3\t2\t1\n', 'utf8'));
+
+      const body = bytes.toString('utf8');
+      expect(body).toBe('total\topen\tdone\n3\t2\t1\n');
+      expect(body.endsWith('\n')).toBe(true);
+      expect(body.endsWith('\n\n')).toBe(false);
+      expect(body.includes('\r')).toBe(false);
+      expect(body.startsWith('\uFEFF')).toBe(false);
+      expect(body.split('\n')).toEqual(['total\topen\tdone', '3\t2\t1', '']);
+      expect(body.split('\n').slice(0, 2).map((line) => line.split('\t'))).toEqual([
+        ['total', 'open', 'done'],
+        ['3', '2', '1'],
+      ]);
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
