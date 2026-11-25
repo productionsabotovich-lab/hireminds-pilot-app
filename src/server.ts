@@ -36,8 +36,8 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats.tsv') {
         const { total, open, done } = todoStats(state);
-        // Первый круг выпуска: строка чисел пока без завершающего LF (docs/PIL-70.md).
-        return sendTsv(res, `total\topen\tdone\n${total}\t${open}\t${done}`);
+        // Итоговый формат: строка счётчиков завершается ровно одним LF (docs/PIL-70.md).
+        return sendTsv(res, `total\topen\tdone\n${total}\t${open}\t${done}\n`);
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);
