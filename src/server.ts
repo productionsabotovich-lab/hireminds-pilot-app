@@ -24,7 +24,8 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       if (req.method === 'GET' && url.pathname === '/todos') {
         const filter = url.searchParams.get('filter');
         const allowed = filter === 'open' || filter === 'done' ? filter : 'all';
-        return send(res, 200, listTodos(state, allowed));
+        const q = url.searchParams.get('q');
+        return send(res, 200, listTodos(state, allowed, q ?? undefined));
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));

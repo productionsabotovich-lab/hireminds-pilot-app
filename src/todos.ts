@@ -22,10 +22,18 @@ export function completeTodo(list: TodoList, id: number): TodoList {
   return { ...list, items: list.items.map((t) => (t.id === id ? { ...t, done: true } : t)) };
 }
 
-export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all'): Todo[] {
-  if (filter === 'open') return list.items.filter((t) => !t.done);
-  if (filter === 'done') return list.items.filter((t) => t.done);
-  return list.items;
+// Список дел по статусу и по подстроке заголовка.
+// q — буквальная подстрока заголовка, регистр игнорируется. Отсутствие или пустое
+// значение ограничения не вносит, пробелы в q значимы. Порядок дел сохраняется.
+export function listTodos(list: TodoList, filter: 'all' | 'open' | 'done' = 'all', q?: string): Todo[] {
+  let items = list.items;
+  if (filter === 'open') items = items.filter((t) => !t.done);
+  if (filter === 'done') items = items.filter((t) => t.done);
+  if (q !== undefined && q.length > 0) {
+    const needle = q.toLowerCase();
+    items = items.filter((t) => t.title.toLowerCase().includes(needle));
+  }
+  return items;
 }
 
 // Сводка по списку: всего, открыто и выполнено. Счёт по флагу done, вход не мутируется.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTodo, completeTodo, emptyList, listTodos, todoStats } from '../src/todos.js';
+import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from '../src/todos.js';
 
 describe('todos', () => {
   it('adds a todo with a sequential id', () => {
@@ -23,6 +23,70 @@ describe('todos', () => {
 
   it('fails to complete an unknown todo', () => {
     expect(() => completeTodo(emptyList(), 9)).toThrow('todo 9 not found');
+  });
+});
+
+describe('listTodos search', () => {
+  function listWithBread(): TodoList {
+    let { list } = addTodo(emptyList(), 'Купить ХЛЕБ');
+    list = addTodo(list, 'Хлеб для ужина').list;
+    list = addTodo(list, 'Позвонить врачу').list;
+    list = completeTodo(list, 2);
+    return list;
+  }
+
+  it('finds todos by a case-insensitive substring of the title', () => {
+    expect(listTodos(listWithBread(), 'all', 'хЛеБ').map((t) => t.id)).toEqual([1, 2]);
+  });
+
+  it('matches a substring inside a word', () => {
+    expect(listTodos(listWithBread(), 'all', 'вра').map((t) => t.id)).toEqual([3]);
+  });
+
+  it('returns an empty list when nothing matches', () => {
+    expect(listTodos(listWithBread(), 'all', 'молоко')).toEqual([]);
+  });
+
+  it('combines the title search with the status filter', () => {
+    expect(listTodos(listWithBread(), 'open', 'хлеб').map((t) => t.id)).toEqual([1]);
+    expect(listTodos(listWithBread(), 'done', 'хлеб').map((t) => t.id)).toEqual([2]);
+    expect(listTodos(listWithBread(), 'all', 'хлеб').map((t) => t.id)).toEqual([1, 2]);
+  });
+
+  it('keeps the previous behaviour when q is missing or empty', () => {
+    const list = listWithBread();
+    expect(listTodos(list).map((t) => t.id)).toEqual([1, 2, 3]);
+    expect(listTodos(list, 'open').map((t) => t.id)).toEqual([1, 3]);
+    expect(listTodos(list, 'done').map((t) => t.id)).toEqual([2]);
+    expect(listTodos(list, 'all', '').map((t) => t.id)).toEqual([1, 2, 3]);
+    expect(listTodos(list, 'open', '').map((t) => t.id)).toEqual([1, 3]);
+  });
+
+  it('treats spaces in q as significant', () => {
+    expect(listTodos(listWithBread(), 'all', ' хлеб ')).toEqual([]);
+  });
+
+  it('searches literally, without regular expressions', () => {
+    let list = addTodo(emptyList(), 'a.b').list;
+    list = addTodo(list, 'axb').list;
+    expect(listTodos(list, 'all', '.').map((t) => t.title)).toEqual(['a.b']);
+  });
+
+  it('does not mutate the list and keeps the order and fields of the found todos', () => {
+    const list = listWithBread();
+    const items = list.items;
+    const elements = [...list.items];
+    const nextId = list.nextId;
+
+    const found = listTodos(list, 'all', 'хлеб');
+
+    expect(list.nextId).toBe(nextId);
+    expect(list.items).toBe(items);
+    expect(list.items.every((t, i) => t === elements[i])).toBe(true);
+    expect(found).toEqual([
+      { id: 1, title: 'Купить ХЛЕБ', done: false },
+      { id: 2, title: 'Хлеб для ужина', done: true },
+    ]);
   });
 });
 
