@@ -1,8 +1,17 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos,
+// POST /todos/:id/complete, GET /version.
+import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
 let state: TodoList = emptyList();
+
+// Версия приложения — из package.json, который лежит рядом с каталогами src и dist.
+// Путь считается от файла модуля, поэтому ответ не зависит от рабочего каталога процесса.
+const packageJson = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+) as { version: string };
 
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -28,6 +37,9 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
       }
       if (req.method === 'GET' && url.pathname === '/todos/stats') {
         return send(res, 200, todoStats(state));
+      }
+      if (req.method === 'GET' && url.pathname === '/version') {
+        return send(res, 200, { version: packageJson.version });
       }
       if (req.method === 'POST' && url.pathname === '/todos') {
         const body = await readJson(req);
