@@ -107,6 +107,61 @@ describe('server routes', () => {
     });
   });
 
+  describe('GET /health', () => {
+    it('returns ok with a JSON content type', async () => {
+      const res = await get('/health');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe('{"status":"ok"}');
+      expect(await (await get('/health')).json()).toEqual({ status: 'ok' });
+    });
+
+    it('returns the same answer repeatedly and keeps the todos unchanged', async () => {
+      await addTodo('Купить хлеб');
+      await post('/todos/1/complete');
+
+      const before = await (await get('/todos')).text();
+      const statsBefore = await (await get('/todos/stats')).text();
+
+      const first = await get('/health');
+      const second = await get('/health');
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      expect(await first.text()).toBe('{"status":"ok"}');
+      expect(await second.text()).toBe('{"status":"ok"}');
+
+      const after = await (await get('/todos')).text();
+      const statsAfter = await (await get('/todos/stats')).text();
+      expect(after).toBe(before);
+      expect(statsAfter).toBe(statsBefore);
+
+      const next = await post('/todos', { title: 'Позвонить врачу' });
+      expect(next.status).toBe(201);
+      expect(await next.json()).toEqual({ id: 2, title: 'Позвонить врачу', done: false });
+    });
+
+    it('ignores query parameters', async () => {
+      const plain = await (await get('/health')).text();
+      const probed = await (await get('/health?probe=1')).text();
+      expect(probed).toBe(plain);
+      expect(probed).toBe('{"status":"ok"}');
+    });
+
+    it('keeps the existing 404 for other paths and methods', async () => {
+      const trailingSlash = await get('/health/');
+      expect(trailingSlash.status).toBe(404);
+      expect(await trailingSlash.text()).toBe('{"error":"not found"}');
+
+      const otherCase = await get('/Health');
+      expect(otherCase.status).toBe(404);
+      expect(await otherCase.text()).toBe('{"error":"not found"}');
+
+      const posted = await post('/health');
+      expect(posted.status).toBe(404);
+      expect(await posted.text()).toBe('{"error":"not found"}');
+    });
+  });
+
   describe('existing routes', () => {
     it('lists todos and filters them by state', async () => {
       await addTodo('a');
