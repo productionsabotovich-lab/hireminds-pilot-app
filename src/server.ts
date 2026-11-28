@@ -1,4 +1,4 @@
-// HTTP-интерфейс над списком дел: GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
+// HTTP-интерфейс над списком дел: GET /health, GET /todos, GET /todos/stats, POST /todos, POST /todos/:id/complete.
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { addTodo, completeTodo, emptyList, listTodos, todoStats, type TodoList } from './todos.js';
 
@@ -21,6 +21,10 @@ export function handle(req: IncomingMessage, res: ServerResponse): void {
   const complete = url.pathname.match(/^\/todos\/(\d+)\/complete$/);
   void (async () => {
     try {
+      // Проверка доступности процесса: состояние дел не читается и не меняется.
+      if (req.method === 'GET' && url.pathname === '/health') {
+        return send(res, 200, { status: 'ok' });
+      }
       if (req.method === 'GET' && url.pathname === '/todos') {
         const filter = url.searchParams.get('filter');
         const allowed = filter === 'open' || filter === 'done' ? filter : 'all';
