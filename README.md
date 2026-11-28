@@ -24,6 +24,7 @@ npm run check                # проверить типы
 | --- | --- |
 | `GET /todos?filter=all\|open\|done` | Список дел |
 | `GET /todos/stats` | Сводка по делам: `total`, `open`, `done` |
+| `GET /version` | Версия приложения: `version` |
 | `POST /todos` `{ "title": "..." }` | Добавить дело |
 | `POST /todos/:id/complete` | Отметить выполненным |
 
@@ -33,6 +34,14 @@ npm run check                # проверить типы
 ```
 $ curl -s http://127.0.0.1:3000/todos/stats
 {"total":3,"open":2,"done":1}
+```
+
+Версия приложения отдаётся по `GET /version`: значение `version` берётся из `package.json`
+приложения (сейчас `0.1.0`), query-параметры игнорируются, запрос ничего не меняет.
+
+```
+$ curl -s http://127.0.0.1:3000/version
+{"version":"0.1.0"}
 ```
 
 Состояние хранится в памяти процесса и теряется при перезапуске.

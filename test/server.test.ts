@@ -1,7 +1,14 @@
 // HTTP-поведение маршрутов. Состояние `state` — переменная модуля src/server.ts,
 // поэтому перед каждым кейсом реестр модулей сбрасывается и модуль импортируется заново.
+import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Ожидаемая версия читается из package.json независимо от реализации маршрута.
+const packageJson = JSON.parse(
+  readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'),
+) as { version: string };
 
 describe('server routes', () => {
   let server: Server;
@@ -104,6 +111,55 @@ describe('server routes', () => {
       const res = await post('/todos/stats');
       expect(res.status).toBe(404);
       expect(await res.text()).toBe('{"error":"not found"}');
+    });
+  });
+
+  describe('GET /version', () => {
+    it('returns the version from package.json', async () => {
+      const res = await get('/version');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('application/json; charset=utf-8');
+      expect(await res.text()).toBe(JSON.stringify({ version: packageJson.version }));
+    });
+
+    it('returns the version as the only field', async () => {
+      const body = (await (await get('/version')).json()) as Record<string, unknown>;
+      expect(Object.keys(body)).toEqual(['version']);
+      expect(typeof body.version).toBe('string');
+      expect(body.version).toBe(packageJson.version);
+    });
+
+    it('ignores query parameters', async () => {
+      const plain = await (await get('/version')).text();
+      const withQuery = await (await get('/version?probe=1')).text();
+      expect(withQuery).toBe(plain);
+      expect(withQuery).toBe(JSON.stringify({ version: packageJson.version }));
+    });
+
+    it('keeps the existing 404 for other methods and paths', async () => {
+      const posted = await post('/version');
+      expect(posted.status).toBe(404);
+      expect(await posted.text()).toBe('{"error":"not found"}');
+
+      for (const path of ['/version/', '/Version']) {
+        const res = await get(path);
+        expect(res.status).toBe(404);
+        expect(await res.text()).toBe('{"error":"not found"}');
+      }
+    });
+
+    it('does not change the todos', async () => {
+      await addTodo('a');
+      await addTodo('b');
+      await post('/todos/1/complete');
+
+      const before = await (await get('/todos')).text();
+      const statsBefore = await (await get('/todos/stats')).text();
+
+      expect((await get('/version')).status).toBe(200);
+
+      expect(await (await get('/todos')).text()).toBe(before);
+      expect(await (await get('/todos/stats')).text()).toBe(statsBefore);
     });
   });
 
